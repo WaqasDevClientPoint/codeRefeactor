@@ -33,19 +33,37 @@ class BookingController extends Controller
      * @param Request $request
      * @return mixed
      */
+
+    // Here I breakdown the index method to small methods to readability and maintainability.
     public function index(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
-
-            $response = $this->repository->getUsersJobs($user_id);
-
-        }
-        elseif($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
-        {
-            $response = $this->repository->getAll($request);
+        if ($user_id = $request->get('user_id')) {
+            return $this->getUserJobsResponse($user_id);
+        } elseif ($this->isAdminOrSuperAdmin($request)) {
+            return $this->getAllJobsResponse($request);
         }
 
-        return response($response);
+        // Handle other cases or return an appropriate response.
+    }
+
+    protected function getUserJobsResponse($user_id)
+    {
+        return response($this->repository->getUsersJobs($user_id));
+    }
+
+    protected function isAdminOrSuperAdmin(Request $request)
+    {
+        $user = $request->__authenticatedUser;
+        return $user->user_type == env('ADMIN_ROLE_ID') || $user->user_type == env('SUPERADMIN_ROLE_ID');
+    }
+
+    protected function getAllJobsResponse(Request $request)
+    {
+//        return response($this->repository->getAll($request));
+
+        // consistent response format.
+        return response()->json($this->repository->getAll($request));
+
     }
 
     /**
@@ -55,21 +73,31 @@ class BookingController extends Controller
     public function show($id)
     {
         $job = $this->repository->with('translatorJobRel.user')->find($id);
-
-        return response($job);
+         //we can do same in other functions
+        return response()->json($job);
     }
 
     /**
      * @param Request $request
      * @return mixed
      */
+    //Error handling is crucial for ensuring that your application gracefully handles exceptions and provides informative error responses to users.
     public function store(Request $request)
     {
-        $data = $request->all();
+        try {
+            $this->validate($request, [
+                // Define validation rules here
+            ]);
 
-        $response = $this->repository->store($request->__authenticatedUser, $data);
+            $data = $request->all();
+            $response = $this->repository->store($request->__authenticatedUser, $data);
 
-        return response($response);
+            return response()->json($response);
+        } catch (ValidationException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'An error occurred.'], 500);
+        }
 
     }
 
@@ -80,6 +108,9 @@ class BookingController extends Controller
      */
     public function update($id, Request $request)
     {
+        $this->validate($request, [
+            // Define validation rules here
+        ]);
         $data = $request->all();
         $cuser = $request->__authenticatedUser;
         $response = $this->repository->updateJob($id, array_except($data, ['_token', 'submit']), $cuser);
@@ -120,6 +151,7 @@ class BookingController extends Controller
      * @param Request $request
      * @return mixed
      */
+
     public function acceptJob(Request $request)
     {
         $data = $request->all();
